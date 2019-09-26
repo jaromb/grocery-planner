@@ -1,5 +1,6 @@
 import React, {Component} from 'react';
 import fire from '../fire';
+import {Redirect} from 'react-router-dom'
 
 class ManageRecipes extends Component {
 state = {
@@ -12,24 +13,78 @@ state = {
     ingredients: [],
     measure: '',
     response: '',
-    updatedRecipe: ''
+    updatedRecipe: '',
+    user: true
 }
 
 
 componentDidMount() {
     const db = fire.firestore();
-    
-    db.collection("recipes")
+
+    const setUser = (username) => {
+        this.setState({
+            user: username
+        })
+    }
+
+    const noUser = () => {
+        this.setState({
+            user: false
+        })
+    }
+
+    new Promise((resolve, reject) => {
+        fire.auth().onAuthStateChanged(function(user) {
+        if (user) { 
+          setUser(user.email)
+        } 
+        else {
+          noUser();    
+          console.log('No user currently signed in.')} 
+      })  
+      resolve();
+    })
+    .catch(() => {
+        console.log('user check failed')
+    })
+    .then(( ) => 
+        getRecipes()
+    )
+    .catch(() => {
+        console.log('get recipes failed')
+    })
+
+    const getRecipes = () => { 
+        db.collection("recipes")
         .get()
         .then((querySnapshot) => {
             let recipes = [];
+            console.log("get recipes user = " + this.state.user)
             querySnapshot.forEach((recipe) => {
-                recipes.push(recipe.data());
+                recipes.push(recipe.data());  
             })  
+            
             this.setState({
-                recipes: recipes
+                recipes: recipes.filter(recipe => recipe.user === this.state.user)
             })
+            console.log(this.state.recipes)
         })  
+    }
+}
+
+
+
+verifyUser = () => {
+    
+    fire.auth().onAuthStateChanged(function(user) {
+    if (user) {
+      return true
+    } 
+    else {
+        console.log('No user currently signed in.')
+        return false
+    } 
+  })  
 }
 
 handleIngredientsClick = (item) => (index) => {
@@ -108,10 +163,10 @@ editRecipe = (recipe, index) => (event) => {
 
 updateRecipe = () => {
     const db = fire.firestore();
-    const updatedRecipe = {name: this.state.recipeName, ingredients: this.state.ingredients}
+    const updatedRecipe = {user: this.state.user, name: this.state.recipeName, ingredients: this.state.ingredients}
     
     db.collection("recipes").doc(updatedRecipe.name).set({
-        name: updatedRecipe.name, ingredients: updatedRecipe.ingredients
+        user: updatedRecipe.user, name: updatedRecipe.name, ingredients: updatedRecipe.ingredients
     })
     .then(docRef =>  
         // console.log("Document written with ID: ", docRef.id);
@@ -166,7 +221,7 @@ deleteRecipe = (recipeName) => () =>  {
 
 
 render() {
-    return(
+    return this.state.user ?
         <div style={{display: 'flex', flexDirection: 'row', justifyContent: 'space-around'}}>
             <div style={{display: 'flex', flexDirection: 'row', justifyContent: 'space-around'}}>
                 <div style={{display: 'flex', flexDirection: 'column', justifyItems: 'center', alignItems: 'center'}}>
@@ -276,7 +331,8 @@ render() {
                 null
                 }
         </div>
-    )
+    :
+    <Redirect to='/login'></Redirect>
 }
 
 }

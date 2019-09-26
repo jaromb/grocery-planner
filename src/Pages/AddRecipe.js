@@ -1,12 +1,44 @@
 import React, {Component} from 'react';
 import fire from '../fire';
+import {Redirect} from 'react-router-dom'
 
 class AddRecipe extends Component {
 state = {
     recipeName: '',
     ingredients: [{name: '', quantity: '', measure: ''}],
-    response: ''
+    response: '',
+    user: true
 }
+
+componentDidMount() {
+    
+    let username = null
+
+    const setUser = (username) => {
+        this.setState({
+            user: username
+        })
+    }
+
+    const noUser = () => {
+        this.setState({
+            user: false
+        })
+    }
+
+    fire.auth().onAuthStateChanged(function(user) {
+        if (user) {
+          username = user.email
+          setUser(username)
+          console.log(username)
+        } 
+        else {
+          noUser();
+          console.log('No user currently signed in.')} 
+      })  
+        
+}
+
 
 moreIngredients = (item) => {
     item = {name: '', quantity: '', measure: ''}
@@ -56,10 +88,10 @@ handleIngredientMeasure = (ingredient, index) => (event) => {
 
 addToRecipes = () => () => {
     const db = fire.firestore();
-    const newRecipe = {name: this.state.recipeName, ingredients: this.state.ingredients}
+    const newRecipe = {user: this.state.user, name: this.state.recipeName, ingredients: this.state.ingredients}
     
     db.collection("recipes").doc(newRecipe.name).set({
-        name: newRecipe.name, ingredients: newRecipe.ingredients
+        user: newRecipe.user, name: newRecipe.name, ingredients: newRecipe.ingredients
     })
     .then(docRef => 
         // console.log("Document written with ID: ", docRef.id);
@@ -79,7 +111,7 @@ addToRecipes = () => () => {
 
 
 render() {
-    return(
+    return this.state.user ?
         <div>
             <h2 style={{textAlign: 'center', fontSize: 30, marginBottom: 0}}>Add A New Recipe</h2>
             <div style={{display: 'flex', flexDirection: 'column', alignItems: 'center'}}>
@@ -118,7 +150,8 @@ render() {
                 <p style={{color: 'red'}}>{this.state.response}</p>
             </div>
         </div>
-    )
+    :
+    <Redirect to='/login'></Redirect>
 }
 
 }

@@ -1,5 +1,6 @@
 import React, {Component} from 'react';
 import fire from '../fire';
+import {Redirect} from 'react-router-dom'
 
 class ListBuilder extends Component {
 state = {
@@ -9,27 +10,101 @@ state = {
     ingredients: null,
     selected: [],
     searchText: '',
-    filteredRecipes: ''
+    filteredRecipes: '',
+    response: null,
+    user: true
 }
 
 
 componentDidMount() {
     const db = fire.firestore();
     
-    db.collection("recipes")
+    let username = null
+
+    const setUser = (username) => {
+        this.setState({
+            user: username
+        })
+    }
+
+    const noUser = () => {
+        this.setState({
+            user: false
+        })
+    }
+
+    new Promise((resolve, reject) => {
+        fire.auth().onAuthStateChanged(function(user) {
+        if (user) {
+          username = user.email
+          setUser(username)
+          console.log("current user: " + username)
+        } 
+        else {
+            noUser();
+            console.log('No user currently signed in.')} 
+      })  
+      resolve();
+    })
+    .catch(() => {
+        console.log('user check failed')
+    })
+    .then(( ) => 
+        getRecipes()
+    )
+    .catch(() => {
+        console.log('get recipes failed')
+    })
+    .then(
+        () => 
+        getList()
+    )
+    .catch(() => {
+        console.log('get list failed')
+    })
+   
+    
+    
+    const getRecipes = () => { 
+        db.collection("recipes")
         .get()
         .then((querySnapshot) => {
             let recipes = [];
+            console.log("get recipes user = " + this.state.user)
             querySnapshot.forEach((recipe) => {
-                recipes.push(recipe.data());
+                recipes.push(recipe.data());  
             })  
+            
             this.setState({
-                recipes: recipes
+                recipes: recipes.filter(recipe => recipe.user === this.state.user)
             })
             console.log(this.state.recipes)
         })  
-        
+    }
+
+    
+    const getList = () => {
+        db.collection("grocery-list")
+        .get()
+        .then((querySnapshot) => {
+            querySnapshot.forEach((item) => {
+                // console.log(item._key.path.segments.includes(this.state.user))
+                if (item._key.path.segments.includes(this.state.user)) {
+                 const list = item.data().shoppingList || []
+                
+                this.setState({
+                    shoppingList: list
+                })
+                }
+                
+            })  
+        }
+        )   
+       
+    } 
+         
 }
+
 
 handleIngredientsClick = (item) => (index) => {
     console.log(item);
@@ -51,11 +126,66 @@ handleSearch = (event) => {
     filteredRecipes: this.state.recipes.filter(item => item.name.toLowerCase().includes(event.target.value.toLowerCase()))})
 }
 
-addToShoppingList = () => {
-    this.setState({
-        shoppingList: this.state.shoppingList.concat(this.state.selected),
-        selected: [],
-        buttonClicked: false
+addToShoppingList = async () => {
+    
+    let lowerCaseList = this.state.shoppingList.map(item =>
+        item.name.toLowerCase()
+        )
+
+    let listCopy 
+    let itemQuantity
+    let addedQuantity
+    let newQuantity
+
+    const incrementList = item => {
+        listCopy = this.state.shoppingList
+        console.log('increment list activated');
+        itemQuantity = Number(listCopy[lowerCaseList.findIndex(index => 
+            index === item.name.toLowerCase())].quantity);
+        addedQuantity = Number(item.quantity);
+        newQuantity = itemQuantity += addedQuantity;
+
+        listCopy[lowerCaseList.findIndex(index => 
+            index === item.name.toLowerCase())].quantity = newQuantity;
+
+        this.setState({
+            shoppingList: listCopy
+        })
+    }
+
+    const addToList = item => {
+        listCopy = this.state.shoppingList
+        console.log('addToList activated')
+       listCopy[listCopy.length] = item;
+        this.setState({
+            shoppingList: listCopy
+        })
+    }
+
+   const handleAdd = () => {
+       this.state.selected.forEach( (item, itemIndex) => 
+        this.state.shoppingList.findIndex(index => index.name.toLowerCase() === this.state.selected[itemIndex].name.toLowerCase()) !== -1 ?    
+        incrementList(item)
+        :
+        addToList(item)
+    )  
+       }
+
+    const handleAndClear = () => {
+        handleAdd();
+        this.setState({
+            selected: [],
+            buttonClicked: false
+        })
+    }   
+
+    await handleAndClear();
+    
+    const db = fire.firestore()
+    const shoppingList = this.state.shoppingList
+    
+    db.collection("grocery-list").doc(this.state.user).set({
+        shoppingList
     })
     
 }
@@ -75,8 +205,52 @@ handleCheckbox = (ingredient, index) => () => {
     
 }
 
+clearResponse = () => {
+    this.setState({
+        response: ''
+    })
+}
+
+deleteItem = (item, index) => () =>  {
+    const db = fire.firestore();
+    const shoppingList = this.state.shoppingList.filter(ingredient => ingredient.name!==item.name)
+
+    db.collection("grocery-list").doc(this.state.user).set(
+        {shoppingList}
+    )
+    .then( docRef =>  
+        this.setState({
+            response: 'Item successfully deleted!',
+            shoppingList: shoppingList
+        })
+        // console.log('success') 
+)
+        .then(setTimeout(this.clearResponse, 5000))    
+    .catch((error) =>
+        // console.error("Error deleting item: ", error);
+        this.setState({
+            response: 'Error deleting item, please try again.'
+        })
+)    
+}
+
+verifyUser = () => {
+    
+    fire.auth().onAuthStateChanged(function(user) {
+    if (user) {
+        console.log("there's a user")
+      return true
+    } 
+    else {
+        console.log('No user currently signed in.')
+        return false
+    } 
+  })  
+}
+
 render() {
-    return(
+    // return(
+    return this.state.user ?
         <div>
             <h1 style={{textAlign: 'center', marginBottom: 0}}>Create Your Shopping List</h1>
         <div style={{display: 'flex', flexDirection: 'row', justifyContent: 'space-around'}}>
@@ -147,14 +321,17 @@ render() {
                 <ul style={{ fontSize: 18, textAlign: 'center', listStyle: 'none'}}><label style={{fontSize: 25, fontWeight: 'bold', textDecoration: 'underline'}}>Shopping List</label>
                     
                     {this.state.shoppingList.map(item =>
-                    <li style={{fontsize: 18, textDecoration: 'none', paddingTop: 5}}>{item.name} x {item.quantity} {item.measure}</li>
+                    <li style={{fontsize: 18, textDecoration: 'none', paddingTop: 5}}>{item.name} x {item.quantity} {item.measure}
+                        <button style={{backgroundColor: 'red', marginLeft: 10, cursor: 'pointer'}} onClick={this.deleteItem(item)}>X</button>
+                    </li>
                     )}
                 </ul>
             </div>
         </div>
         </div>
-    )
+    :
+    <Redirect to='/login'></Redirect>   
 }
-
+    
 }
 export default ListBuilder; 
