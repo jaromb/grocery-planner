@@ -17,6 +17,9 @@ state = {
 
 
 componentDidMount() {
+
+    document.title = 'Grocery List'
+    
     const db = fire.firestore();
     
     let username = null

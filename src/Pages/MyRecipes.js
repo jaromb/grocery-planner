@@ -19,6 +19,8 @@ state = {
 
 
 componentDidMount() {
+    document.title='My Recipes'
+
     const db = fire.firestore();
 
     const setUser = (username) => {

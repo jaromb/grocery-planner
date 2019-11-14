@@ -15,6 +15,8 @@ state = {
 
 componentDidMount() {
     
+    document.title = 'Login'
+    
     let username = null
 
     const setUser = () => {

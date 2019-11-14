@@ -12,6 +12,7 @@ state = {
 
 componentDidMount() {
     
+    document.title = 'Add Recipe'
     let username = null
 
     const setUser = (username) => {
